@@ -1,19 +1,41 @@
 import React, { useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { DeleteOutlined, EditOutlined, ExclamationCircleFilled, EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Table, Tag, Modal, Input, Button } from "antd";
+import ColumnsType from "./components/attoms/ColumnsType";
+
+interface TypesName {
+  type?: 'string' | 'integer' | 'float' | 'date' | 'phone' | 'link' | 'list' | 'actions' | 'default';
+}
+
+interface IActionType {
+  actionName: string;
+  actionIcon: React.ReactNode;
+  actionHandler: (id: string | number) => void;
+}
+
+interface IStatusValues {
+  value: string;
+  color: string;
+  label: string;
+}
+interface IColumnsOptions {
+  format?: string;
+  url?: string;
+  isInternal?: boolean
+  statusValues?: IStatusValues[]
+  trueValue?: string;
+  falseValue?: string;
+}
 
 interface ColumnType {
   title: string;
   dataIndex: string;
-  type?: 'string' | 'integer' | 'float' | 'date' | 'phone' | 'link' | 'list' | 'actions' | 'default';
+  type?: TypesName['type'];
   sortable?: boolean;
-  options?: {
-    format?: string;
-    url?: string;
-  };
-  actions?: string[];
+  options?: IColumnsOptions;
+  actions?: IActionType[];
 }
 
 interface DataType {
@@ -22,18 +44,18 @@ interface DataType {
 }
 
 interface TypeAttributesProps {
-  el?: 'string' | 'integer' | 'float' | 'date' | 'phone' | 'link' | 'list' | 'actions' | 'default';
+  el?: TypesName['type'];
   content: any;
-  options?: {
-    format?: string;
-    url?: string;
-  };
-  actions?: string[];
+  options?: IColumnsOptions;
+  actions?: IActionType[];
 }
 
 interface DataTableProps {
   tableTitle?: string;
   columns: ColumnType[];
+  pagination?: any;
+  actions?: IActionType[];
+  onTableAction?: Function;
   data: DataType[];
 }
 
@@ -55,10 +77,14 @@ const getSorter = (type: string) => {
   }
 };
 
-function DataTable({ tableTitle = "Title", columns = [], data = [] }: DataTableProps) {
+function DataTable({ tableTitle = "Title", columns = [], actions = [], data = [], pagination = {}, onTableAction }: DataTableProps) {
   const [antData, setAntData] = useState<DataType[]>([]);
   const [antdColumn, setAntdColumn] = useState<any[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [sortedInfo, setSortedInfo] = useState<{ columnKey: string | null, order: 'ascend' | 'descend' | null }>({
+    columnKey: null,
+    order: null,
+  });
   const navigate = useNavigate();
 
   // Function to handle search across all columns
@@ -92,49 +118,43 @@ function DataTable({ tableTitle = "Title", columns = [], data = [] }: DataTableP
   function TypeAttributes({ el = "default", content, options = {}, actions = [] }: TypeAttributesProps): JSX.Element {
     const type: { [key: string]: JSX.Element } = {
       default: <span></span>,
-      string: <span>{content}</span>,
-      integer: <span>{Number(content)}</span>,
-      float: <span>{parseFloat(String(content)).toFixed(2)}</span>,
-      date: <span>{dayjs(content).format(options.format || "DD.MM.YYYY")}</span>,
-      phone: <span dir="ltr">+{content}</span>,
-      link: <a href={options.url}>{content}</a>,
-      list: Array.isArray(content) ? (
-        <>{content.map((tag: string) => (
-          <Tag color={"purple"} key={tag}>
-            {tag.toUpperCase()}
-          </Tag>
-        ))}</>
-      ) : <span>{content}</span>,
-      actions: (<>
-        {actions.includes("delete") && <button onClick={() => handleDelete(content.id)} style={{color: 'red'}}><DeleteOutlined /></button>}
-        {actions.includes("edit") && <button style={{color: 'blue'}}><EditOutlined /></button>}
-        {actions.includes("view") && <button><EyeOutlined /></button>}
-      </>),
+      string: <ColumnsType.StringType content={content} />,
+      integer: <ColumnsType.IntegerType content={content} />,
+      float: <ColumnsType.FloatType content={content} />,
+      status: <ColumnsType.StatusType content={content} options={options} />,
+      // uuid: <span>{content} <button>Copy</button></span>,
+      boolean: <ColumnsType.BooleanType content={content} options={options} />,
+      date: <ColumnsType.DateType content={content} options={options} />,
+      phone: <ColumnsType.PhoneType content={content} />,
+      link: <ColumnsType.LinkType content={content} options={options} />,
+      list: <ColumnsType.ListType content={content} />,
+      actions: (
+        <>
+          {actions.map((action: IActionType, index: number) => (
+            console.log(action),
+            <button key={`${action.actionName}${index}`} onClick={() => action.actionHandler(content)}>
+              {action.actionIcon} {action.actionName}
+            </button>
+          ))}
+        </>
+      ),
     };
     return type[el] || type.default;
   }
 
-  const handleDelete = (id: string | number) => {
-    Modal.confirm({
-      title: 'Are you sure delete this task?',
-      icon: <ExclamationCircleFilled />,
-      content: 'This action cannot be undone',
-      okText: 'Yes',
-      okType: 'danger',
-      cancelText: 'No',
-      onOk() {
-        setAntData(prevData => prevData.filter(row => row.id !== id));
-      },
-      onCancel() {
-        console.log('Cancel');
-      },
-    });
-  }
 
   useEffect(() => {
     setAntData([...data])
-    const formattedColumns = columns.map((col) => ({
+    const formattedColumns = [...columns, {
+      title: "Action",
+      key: "action",
+      dataIndex: "actions",
+      type: 'actions',
+      actions: actions
+    }].map((col) => ({
       ...col,
+      key: col.dataIndex,
+      sortOrder: sortedInfo.columnKey === col.dataIndex ? sortedInfo.order : null,
       render: (content: any) => (
         <TypeAttributes
           el={col.type || "default"}
@@ -144,18 +164,19 @@ function DataTable({ tableTitle = "Title", columns = [], data = [] }: DataTableP
         />
       ),
       sorter: ['string', 'integer', 'float', 'date', 'link'].includes(col.type || 'default') && col.sortable !== false ? 
-        (a: any, b: any) => getSorter(col.type || 'default')(a[col.dataIndex], b[col.dataIndex]) : 
+        (a: any, b: any) => {
+          const sorterFunc = getSorter(col.type || 'default');
+          return sorterFunc ? sorterFunc(a[col.dataIndex], b[col.dataIndex]) : 0;
+        } : 
         undefined
     }));
     setAntdColumn(formattedColumns);
-  }, [columns, data]);
+  }, [columns, data, sortedInfo]);
 
-  console.log(antdColumn);
   return (
     <>
       <h2>{tableTitle}</h2>
       <span style={{ display: "flex", justifyContent: "space-between" }}>
-
         <Input
           placeholder="Search in all columns..."
           prefix={<SearchOutlined />}
@@ -167,7 +188,31 @@ function DataTable({ tableTitle = "Title", columns = [], data = [] }: DataTableP
           Add New
         </Button>
       </span>
-      <Table columns={antdColumn} dataSource={antData} />
+      <Table 
+        columns={antdColumn} 
+        dataSource={antData} 
+        onChange={(pagination, filters, sorter: any) => {
+          onTableAction && onTableAction({pagination, filters, sorter});
+          // console.log(`Pagination: ${JSON.stringify(pagination)}, Filters: ${JSON.stringify(filters)}, Sorter: ${JSON.stringify(sorter)}`);
+          if (sorter) {
+            console.log(sorter);
+            setSortedInfo({
+              columnKey: sorter.columnKey,
+              order: sorter.order === 'ascend' ? 'ascend' : 'descend'
+            });
+            console.log('Sorted Column:', sorter.columnKey, 'Order:', sorter.order);
+          }
+        }}
+        pagination={{ 
+          pageSize: pagination.limit, 
+          hideOnSinglePage: true, 
+          total: pagination.total, 
+          defaultCurrent: 1,
+          onChange: (page, pageSize) => {
+            onTableAction && onTableAction({ antPagination: { current: page, pageSize }});
+          }
+        }} 
+      />
     </>
   );
 }
