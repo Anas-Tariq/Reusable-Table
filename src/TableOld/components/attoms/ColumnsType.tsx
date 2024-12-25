@@ -1,8 +1,10 @@
 
-import { Tag } from "antd";
-import { IStatusValues, TypeAttributesProps } from "../../types";
+import { Dropdown, Space, Tag } from "antd";
+import { MoreOutlined } from '@ant-design/icons';
+import { IActionType, IStatusValues, TypeAttributesProps } from "../../types";
 import { Link } from "react-router-dom";
 import dayjs from "dayjs";
+
 
 function StringType({ content }: TypeAttributesProps) {
     return <span>{content ? content : "-"}</span>;
@@ -23,7 +25,7 @@ function StatusType({ content, options = {} }: TypeAttributesProps) {
 }
 
 function BooleanType({ content, options = {} }: TypeAttributesProps) {
-    return <span>{content ? (options.trueValue || "Active") : (options.falseValue || "Inactive")}</span>;
+    return content ? (<Tag color="green">{options.trueValue || "Active"} </Tag>) : (<Tag color="red">{options.falseValue || "Inactive"} </Tag>);
 }
 
 function DateType({ content, options = {} }: TypeAttributesProps) {
@@ -50,6 +52,23 @@ function ListType({ content }: TypeAttributesProps) {
     ) : <span>{content}</span>
 }
 
+function ActionsType({ content, actions = [] }: TypeAttributesProps) {
+
+    const items = actions.map((action: IActionType, index:number) => ({label: (
+      <span key={`${action.actionName}${index}`} onClick={() => action.actionHandler(content)}>
+        {action.actionIcon} {action.actionName}
+      </span>),  key: `${action.actionName}${index}`}))
+
+    return (
+        <Dropdown menu={{ items }} trigger={['click']}>
+            <a onClick={(e) => e.preventDefault()}>
+            <Space>
+                <MoreOutlined />
+            </Space>
+            </a>
+        </Dropdown>
+      )
+}
 
 
 
@@ -62,8 +81,6 @@ export default {
    PhoneType,
    BooleanType,
    DateType,
-   ListType
-   
-
-
+   ListType,
+   ActionsType
 }
